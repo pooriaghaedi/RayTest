@@ -14,6 +14,7 @@ services:
       - dbdata2:/data/db
     networks:
       - backend
+   
 
   redis:
     image: redis
@@ -42,15 +43,75 @@ services:
       - node_modules:/home/node/app/node_modules
     networks:
       - backend
-        #command: ./wait-for.sh db:27017 -- /home/node/app/node_modules/.bin/nodemon app.js
+      - front
+     command: ./wait-for.sh db:27017 -- /home/node/app/node_modules/.bin/nodemon app.js
+     deploy:
+       resources:
+         limits:
+           cpus: 0.50
+           memory: 512M
         #command: /bin/sh -c "/usr/wait-for-it.sh  db:27017 && cd  /usr/src/raychat && npm run server:development"
-    command: /bin/sh -c "sleep 30 && cd  /usr/src/raychat && npm run server:development"
-
+        # command: /bin/sh -c "sleep 30 && cd  /usr/src/raychat && npm run server:development"
+  prometheus:
+    user: root
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus_db:/var/lib/prometheus
+      - ./prometheus_db:/prometheus
+      - ./prometheus_db:/etc/prometheus
+      - ./alert.rules:/etc/prometheus/alert.rules
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.route-prefix=/'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    ports:
+      - '9090:9090'
+    networks:
+      - backend
+  node-exporter:
+    image: prom/node-exporter
+    ports:
+      - '9100:9100'
+    networks:
+      - backend
+  cadvisor:
+    image: google/cadvisor:latest
+    ports:
+      - '8080:8080'
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - backend
+  grafana:
+    user: root
+    image: grafana/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=Test
+    volumes:
+      - ./grafana_db:/var/lib/grafana
+    depends_on:
+      - prometheus
+    ports:
+      - '3000:3000'
+    networks:
+      - backend
+      - front
+      
+networks:
+  front:
+    driver: bridge
 
 
 networks:
   backend:
-    driver: bridge
+    driver: host
 
 volumes:
   dbdata2:
